@@ -89,8 +89,8 @@
 
         .summary-card:hover { transform: translateY(-4px); background: #1f2937; border-color: var(--accent-blue); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); }
 
-        .card-header-row { display: flex; justify-content: space-between; align-items: center; }
-        .summary-card h4 { margin: 0; font-size: 1.1rem; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+        .card-header-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+        .summary-card h4 { margin: 0; font-size: 1.25rem; color: var(--text-main); font-weight: 700; letter-spacing: -0.01em; flex: 1; }
         
         .release-hero { 
             background: rgba(239, 68, 68, 0.05); border-radius: 16px; padding: 16px; border: 1px solid rgba(239, 68, 68, 0.1);
@@ -98,22 +98,22 @@
         }
 
         .summary-date { 
-            font-size: 2.25rem; font-weight: 800; color: #f87171; line-height: 1.2; letter-spacing: -0.025em; margin: 0;
+            font-size: 2rem; font-weight: 800; color: #f87171; line-height: 1.2; letter-spacing: -0.025em; margin: 0;
         }
         
         .summary-meta { font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
 
         .metric-countdown { 
-            font-size: 0.75rem; background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); 
-            padding: 6px 12px; border-radius: 10px; font-weight: 700; border: 1px solid rgba(59, 130, 246, 0.2);
-            text-transform: uppercase;
+            font-size: 0.7rem; background: rgba(59, 130, 246, 0.1); color: var(--accent-blue); 
+            padding: 4px 10px; border-radius: 8px; font-weight: 700; border: 1px solid rgba(59, 130, 246, 0.2);
+            text-transform: uppercase; white-space: nowrap;
         }
 
         .window-box {
             background: rgba(0, 0, 0, 0.2); border-radius: 12px; padding: 12px 16px; border: 1px solid var(--border-color);
         }
         .window-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; font-weight: 600; }
-        .window-dates { font-size: 0.9rem; color: var(--text-main); font-weight: 600; }
+        .window-dates { font-size: 0.85rem; color: var(--text-main); font-weight: 600; }
 
         .detail-view { display: none; }
         .back-btn { background: transparent; border: 1px solid var(--border-color); color: var(--text-main); padding: 8px 16px; border-radius: 8px; cursor: pointer; margin-bottom: 24px; display: inline-flex; align-items: center; gap: 8px; font-size: 0.875rem; font-weight: 500; }
@@ -349,7 +349,7 @@
             
             const countdownData = info.history.map(pt => ({ 
                 x: pt.x, 
-                y: Math.max(0, moment(pt.y_mean).diff(moment(pt.x), 'days', true)) 
+                y: Math.round(Math.max(0, moment(pt.y_mean).diff(moment(pt.x), 'days', true))) 
             }));
 
             if (window.detailChart) window.detailChart.destroy();
@@ -357,17 +357,54 @@
                 type: 'line',
                 data: {
                     datasets: [
-                        { label: 'Expected Date', data: meanData, borderColor: '#ef4444', borderWidth: 3, fill: false, tension: 0.3 },
-                        { label: 'Confidence Window', data: upperData, borderColor: 'transparent', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: '+1', tension: 0.3, pointRadius: 0 },
-                        { label: 'Lower Bound', data: lowerData, borderColor: 'transparent', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: false, tension: 0.3, pointRadius: 0 }
+                        { 
+                            label: 'Expected Date', 
+                            data: meanData.map(pt => ({ x: pt.x, y: moment(pt.y).startOf('day').valueOf() })), 
+                            borderColor: '#ef4444', 
+                            borderWidth: 3, 
+                            fill: false, 
+                            tension: 0.3 
+                        },
+                        { 
+                            label: 'Confidence Window', 
+                            data: upperData.map(pt => ({ x: pt.x, y: moment(pt.y).startOf('day').valueOf() })), 
+                            borderColor: 'transparent', 
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)', 
+                            fill: '+1', 
+                            tension: 0.3, 
+                            pointRadius: 0 
+                        },
+                        { 
+                            label: 'Lower Bound', 
+                            data: lowerData.map(pt => ({ x: pt.x, y: moment(pt.y).startOf('day').valueOf() })), 
+                            borderColor: 'transparent', 
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)', 
+                            fill: false, 
+                            tension: 0.3, 
+                            pointRadius: 0 
+                        }
                     ]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
-                    plugins: { title: { display: false }, legend: { display: false } },
+                    plugins: { 
+                        title: { display: false }, 
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => {
+                                    return ctx.dataset.label + ': ' + moment(ctx.parsed.y).format('MMM D, YYYY');
+                                }
+                            }
+                        }
+                    },
                     scales: {
                         x: { type: 'time', time: { unit: 'day' }, grid: { color: 'rgba(55, 65, 81, 0.2)' } },
-                        y: { type: 'time', time: { unit: 'day' }, grid: { color: 'rgba(55, 65, 81, 0.2)' } }
+                        y: { 
+                            type: 'time', 
+                            time: { unit: 'day', displayFormats: { day: 'MMM D, YYYY' } }, 
+                            grid: { color: 'rgba(55, 65, 81, 0.2)' } 
+                        }
                     }
                 }
             });
@@ -388,10 +425,28 @@
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
-                    plugins: { title: { display: false }, legend: { display: false } },
+                    plugins: { 
+                        title: { display: false }, 
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => {
+                                    return ctx.dataset.label + ': ' + Math.round(ctx.parsed.y) + ' days';
+                                }
+                            }
+                        }
+                    },
                     scales: {
                         x: { type: 'time', time: { unit: 'day' }, grid: { color: 'rgba(55, 65, 81, 0.2)' } },
-                        y: { beginAtZero: true, title: { display: true, text: 'Days', color: '#9ca3af' }, grid: { color: 'rgba(55, 65, 81, 0.2)' } }
+                        y: { 
+                            beginAtZero: true, 
+                            title: { display: true, text: 'Days', color: '#9ca3af' }, 
+                            grid: { color: 'rgba(55, 65, 81, 0.2)' },
+                            ticks: {
+                                stepSize: 1,
+                                callback: (value) => Math.round(value)
+                            }
+                        }
                     }
                 }
             });
