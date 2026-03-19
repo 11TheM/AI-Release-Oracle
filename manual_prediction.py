@@ -50,6 +50,9 @@ def save_prediction_to_database(event_slug, event_title, mean_date, std_dev_days
     
     db_connection.commit()
     
+    # FORCE SYNC: Move data from WAL to the main file so it's visible on network volumes
+    db_connection.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+    
     # VERIFICATION:
     db_cursor.execute("SELECT COUNT(*) FROM history")
     count = db_cursor.fetchone()[0]

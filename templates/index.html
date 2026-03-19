@@ -244,10 +244,12 @@
             if (!cachedData || Object.keys(cachedData).length === 0) {
                 let debugInfo = '';
                 if (window.lastApiResult && window.lastApiResult.debug) {
+                    const stats = window.lastApiResult.debug.db_stats || {};
                     debugInfo = `<div style="margin-top: 20px; text-align: left; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; font-family: monospace; font-size: 0.75rem; color: #888; overflow-x: auto;">
                         <strong>Debug Info:</strong><br>
                         Path: ${window.lastApiResult.debug.db_path_used}<br>
-                        File Exists: ${window.lastApiResult.debug.db_file_exists}<br>
+                        Size: ${stats.size_bytes} bytes<br>
+                        Modified: ${stats.last_modified}<br>
                         Rows Found: ${window.lastApiResult.debug.db_row_count}<br>
                         Data Dir: ${window.lastApiResult.debug.data_directory_contents.join(', ')}
                     </div>`;

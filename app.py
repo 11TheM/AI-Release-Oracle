@@ -1,6 +1,7 @@
 from flask import Flask, render_template, jsonify
 import sqlite3
 import os
+import datetime
 
 app = Flask(__name__)
 
@@ -108,20 +109,28 @@ def get_data():
     for slug in data_by_slug:
         data_by_slug[slug]['history'].reverse()
     
-    # Get file lists for debugging
+    # Get file stats for debugging
     local_files = os.listdir('.') if os.path.exists('.') else []
     data_files = os.listdir('/data') if os.path.isdir('/data') else ["/data is not a directory"]
+    
+    file_info = {}
+    if os.path.exists(db_path):
+        stats = os.stat(db_path)
+        file_info = {
+            'size_bytes': stats.st_size,
+            'last_modified': datetime.datetime.fromtimestamp(stats.st_mtime).isoformat(),
+            'path_abs': os.path.abspath(db_path)
+        }
     
     return jsonify({
         'data': data_by_slug,
         'last_updated': last_updated,
         'debug': {
-            'db_path_used': os.path.abspath(db_path),
+            'db_path_used': db_path,
             'db_file_exists': os.path.exists(db_path),
+            'db_stats': file_info,
             'db_row_count': len(rows),
             'active_slugs_count': len(active_slugs),
-            'active_slugs_list': list(active_slugs),
-            'local_directory_contents': local_files,
             'data_directory_contents': data_files
         }
     })
