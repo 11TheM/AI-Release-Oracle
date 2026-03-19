@@ -5,9 +5,21 @@ import os
 app = Flask(__name__)
 
 def get_db_connection():
+    # Priority: /data/predictions.db for shared Runway volume
+    # Fallback: local predictions.db for local development
     db_path = 'predictions.db'
-    if os.path.exists('/data'):
+    
+    # Check if /data exists and is writable
+    if os.path.isdir('/data'):
         db_path = '/data/predictions.db'
+        # Ensure the file exists so we don't hit read-only errors later
+        if not os.path.exists(db_path):
+            try:
+                open(db_path, 'a').close()
+            except Exception as e:
+                print(f"Warning: Could not touch {db_path}: {e}")
+                db_path = 'predictions.db' # Revert to local if /data is read-only
+                
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn

@@ -10,9 +10,13 @@ POLYMARKET_API_URL = "https://gamma-api.polymarket.com"
 
 def save_prediction_to_database(event_slug, event_title, mean_date, std_dev_days):
     """Saves the calculated prediction metrics to a local SQLite database."""
+    # Shared volume at /data if available
     db_path = 'predictions.db'
-    if os.path.exists('/data'):
+    if os.path.isdir('/data'):
         db_path = '/data/predictions.db'
+        
+    print(f"DEBUG: Saving result to database at: {db_path}")
+    
     db_connection = sqlite3.connect(db_path)
     db_cursor = db_connection.cursor()
     
