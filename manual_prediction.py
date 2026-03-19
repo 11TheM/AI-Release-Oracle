@@ -210,7 +210,10 @@ def analyze_event_predictions(event_slug):
     print(f"=> Expected Date: {projected_mean_date.strftime('%B %d, %Y')}")
     print(f"=> Std Dev:      +/- {std_dev_days:.1f} days")
 
+    db_path = '/data/predictions.db' if os.path.isdir('/data') else 'predictions.db'
+    print(f"DEBUG: Saving result to database at: {db_path}")
     save_prediction_to_database(event_slug, event_data.get('title'), projected_mean_date, std_dev_days)
+    print(f"DATABASE UPDATE COMPLETE for {event_slug}")
 
 if __name__ == "__main__":
     with open("urls.txt", "r") as f:

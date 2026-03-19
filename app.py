@@ -43,7 +43,13 @@ def index():
 @app.route('/api/data')
 def get_data():
     active_slugs = get_active_slugs()
-    conn = get_db_connection()
+    
+    db_path = 'predictions.db'
+    if os.path.isdir('/data'):
+        db_path = '/data/predictions.db'
+    
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
     
     # Ensure table exists
     conn.execute('''
@@ -58,7 +64,7 @@ def get_data():
     ''')
     
     try:
-        rows = conn.execute('SELECT slug, title, mean_date, std_dev_days, calculated_at FROM history ORDER BY calculated_at ASC').fetchall()
+        rows = conn.execute('SELECT slug, title, mean_date, std_dev_days, calculated_at FROM history ORDER BY calculated_at DESC').fetchall()
     except sqlite3.OperationalError:
         rows = []
     conn.close()
@@ -67,11 +73,9 @@ def get_data():
     data_by_slug = {}
     for row in rows:
         slug = row['slug']
-        # If we have active slugs, filter by them. Otherwise, show everything found.
         if active_slugs and slug not in active_slugs: continue
         
         last_updated = row['calculated_at']
-            
         if slug not in data_by_slug:
             data_by_slug[slug] = {'title': row['title'], 'history': []}
         
@@ -81,13 +85,21 @@ def get_data():
             'y_std_dev': row['std_dev_days']
         })
     
+    # Get file lists for debugging
+    local_files = os.listdir('.') if os.path.exists('.') else []
+    data_files = os.listdir('/data') if os.path.isdir('/data') else ["/data is not a directory"]
+    
     return jsonify({
         'data': data_by_slug,
         'last_updated': last_updated,
         'debug': {
+            'db_path_used': os.path.abspath(db_path),
+            'db_file_exists': os.path.exists(db_path),
             'db_row_count': len(rows),
             'active_slugs_count': len(active_slugs),
-            'filtered_slugs_count': len(data_by_slug)
+            'active_slugs_list': list(active_slugs),
+            'local_directory_contents': local_files,
+            'data_directory_contents': data_files
         }
     })
 
