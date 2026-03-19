@@ -15,9 +15,9 @@ def save_prediction_to_database(event_slug, event_title, mean_date, std_dev_days
     if os.path.isdir('/data'):
         db_path = '/data/predictions.db'
         
-    print(f"DEBUG: Saving result to database at: {db_path}")
-    
     db_connection = sqlite3.connect(db_path)
+    # Enable WAL mode for better network volume performance
+    db_connection.execute('PRAGMA journal_mode=WAL')
     db_cursor = db_connection.cursor()
     
     db_cursor.execute('''
@@ -49,6 +49,12 @@ def save_prediction_to_database(event_slug, event_title, mean_date, std_dev_days
     ))
     
     db_connection.commit()
+    
+    # VERIFICATION:
+    db_cursor.execute("SELECT COUNT(*) FROM history")
+    count = db_cursor.fetchone()[0]
+    print(f"VERIFICATION: Database now contains {count} total records.")
+    
     db_connection.close()
 
 def fetch_polymarket_event(event_slug):
