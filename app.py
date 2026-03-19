@@ -32,10 +32,22 @@ def index():
 def get_data():
     active_slugs = get_active_slugs()
     conn = get_db_connection()
+    
+    # Ensure table exists
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            slug TEXT,
+            title TEXT,
+            mean_date TEXT,
+            std_dev_days REAL,
+            calculated_at DATETIME
+        )
+    ''')
+    
     try:
         rows = conn.execute('SELECT slug, title, mean_date, std_dev_days, calculated_at FROM history ORDER BY calculated_at ASC').fetchall()
     except sqlite3.OperationalError:
-        # If std_dev_days column is missing, the DB needs migration by running the script
         rows = []
     conn.close()
     
@@ -43,7 +55,8 @@ def get_data():
     data_by_slug = {}
     for row in rows:
         slug = row['slug']
-        if slug not in active_slugs: continue
+        # If we have active slugs, filter by them. Otherwise, show everything found.
+        if active_slugs and slug not in active_slugs: continue
         
         last_updated = row['calculated_at']
             
@@ -58,7 +71,12 @@ def get_data():
     
     return jsonify({
         'data': data_by_slug,
-        'last_updated': last_updated
+        'last_updated': last_updated,
+        'debug': {
+            'db_row_count': len(rows),
+            'active_slugs_count': len(active_slugs),
+            'filtered_slugs_count': len(data_by_slug)
+        }
     })
 
 if __name__ == '__main__':

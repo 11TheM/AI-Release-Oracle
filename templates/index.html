@@ -240,7 +240,10 @@
             summaryRoot.innerHTML = '';
             timelineRoot.innerHTML = '';
             
-            if (!cachedData || Object.keys(cachedData).length === 0) return;
+            if (!cachedData || Object.keys(cachedData).length === 0) {
+                summaryRoot.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: var(--text-muted);">No prediction data found in database. The cron job might still be running or its volume isn\'t accessible.</div>';
+                return;
+            }
 
             let timelineEvents = [];
             for (const [slug, info] of Object.entries(cachedData)) {
