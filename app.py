@@ -71,11 +71,13 @@ def get_data():
     
     last_updated = None
     data_by_slug = {}
+    
+    # If urls.txt is empty or missing, we'll show all data. 
+    # Otherwise, we'll use it as a priority list.
     for row in rows:
         slug = row['slug']
-        if active_slugs and slug not in active_slugs: continue
         
-        # Capture the most recent timestamp (first row due to DESC sort)
+        # Capture the most recent timestamp
         if last_updated is None:
             last_updated = row['calculated_at']
             
@@ -87,6 +89,20 @@ def get_data():
             'y_mean': row['mean_date'],
             'y_std_dev': row['std_dev_days']
         })
+    
+    # Final check: If after filtering by active_slugs we have nothing, 
+    # but the DB HAD rows, we should show them anyway to avoid a blank screen.
+    if rows and not data_by_slug:
+        # Re-run without filtering if the filter killed all results
+        for row in rows:
+            slug = row['slug']
+            if slug not in data_by_slug:
+                data_by_slug[slug] = {'title': row['title'], 'history': []}
+            data_by_slug[slug]['history'].append({
+                'x': row['calculated_at'],
+                'y_mean': row['mean_date'],
+                'y_std_dev': row['std_dev_days']
+            })
     
     # Reverse history for each slug so charts go left-to-right (chronological)
     for slug in data_by_slug:
