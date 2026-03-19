@@ -75,7 +75,10 @@ def get_data():
         slug = row['slug']
         if active_slugs and slug not in active_slugs: continue
         
-        last_updated = row['calculated_at']
+        # Capture the most recent timestamp (first row due to DESC sort)
+        if last_updated is None:
+            last_updated = row['calculated_at']
+            
         if slug not in data_by_slug:
             data_by_slug[slug] = {'title': row['title'], 'history': []}
         
@@ -84,6 +87,10 @@ def get_data():
             'y_mean': row['mean_date'],
             'y_std_dev': row['std_dev_days']
         })
+    
+    # Reverse history for each slug so charts go left-to-right (chronological)
+    for slug in data_by_slug:
+        data_by_slug[slug]['history'].reverse()
     
     # Get file lists for debugging
     local_files = os.listdir('.') if os.path.exists('.') else []
