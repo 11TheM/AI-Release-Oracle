@@ -207,6 +207,7 @@
                 updatedEl.innerText = 'Updating...';
                 const response = await fetch('/api/data');
                 const result = await response.json();
+                window.lastApiResult = result;
                 cachedData = result.data;
                 renderView();
                 
@@ -241,7 +242,20 @@
             timelineRoot.innerHTML = '';
             
             if (!cachedData || Object.keys(cachedData).length === 0) {
-                summaryRoot.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: var(--text-muted);">No prediction data found in database. The cron job might still be running or its volume isn\'t accessible.</div>';
+                let debugInfo = '';
+                if (window.lastApiResult && window.lastApiResult.debug) {
+                    debugInfo = `<div style="margin-top: 20px; text-align: left; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; font-family: monospace; font-size: 0.75rem; color: #888; overflow-x: auto;">
+                        <strong>Debug Info:</strong><br>
+                        Path: ${window.lastApiResult.debug.db_path_used}<br>
+                        File Exists: ${window.lastApiResult.debug.db_file_exists}<br>
+                        Rows Found: ${window.lastApiResult.debug.db_row_count}<br>
+                        Data Dir: ${window.lastApiResult.debug.data_directory_contents.join(', ')}
+                    </div>`;
+                }
+                summaryRoot.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: var(--text-muted);">
+                    No prediction data found in database. The cron job might still be running or its volume isn't accessible.
+                    ${debugInfo}
+                </div>`;
                 return;
             }
 
