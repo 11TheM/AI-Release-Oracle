@@ -1,64 +1,53 @@
 import requests
 import json
 import os
-import sqlite3
 import math
+import psycopg2
 from datetime import datetime, timedelta
 
 # The base URL for Polymarket's Gamma API
 POLYMARKET_API_URL = "https://gamma-api.polymarket.com"
 
 def save_prediction_to_database(event_slug, event_title, mean_date, std_dev_days):
-    """Saves the calculated prediction metrics to a local SQLite database."""
-    # Shared volume at /data if available
-    db_path = 'predictions.db'
-    if os.path.isdir('/data'):
-        db_path = '/data/predictions.db'
-        
-    db_connection = sqlite3.connect(db_path)
-    # Enable WAL mode for better network volume performance
-    db_connection.execute('PRAGMA journal_mode=WAL')
-    db_cursor = db_connection.cursor()
-    
-    db_cursor.execute('''
-        CREATE TABLE IF NOT EXISTS history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            slug TEXT,
-            title TEXT,
-            mean_date TEXT,
-            std_dev_days REAL,
-            calculated_at DATETIME
-        )
-    ''')
-    
-    # Check if column exists (for migration)
-    db_cursor.execute("PRAGMA table_info(history)")
-    columns = [column[1] for column in db_cursor.fetchall()]
-    if 'std_dev_days' not in columns:
-        db_cursor.execute('ALTER TABLE history ADD COLUMN std_dev_days REAL')
+    """Saves the calculated prediction metrics to a PostgreSQL database."""
+    db_url = os.environ.get('DATABASE_URL')
+    if not db_url:
+        print("Error: DATABASE_URL not set.")
+        return
 
-    db_cursor.execute('''
-        INSERT INTO history (slug, title, mean_date, std_dev_days, calculated_at)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (
-        event_slug, 
-        event_title, 
-        mean_date.strftime('%Y-%m-%d %H:%M:%S') if mean_date else None, 
-        std_dev_days,
-        datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    ))
-    
-    db_connection.commit()
-    
-    # FORCE SYNC: Move data from WAL to the main file so it's visible on network volumes
-    db_connection.execute('PRAGMA wal_checkpoint(TRUNCATE)')
-    
-    # VERIFICATION:
-    db_cursor.execute("SELECT COUNT(*) FROM history")
-    count = db_cursor.fetchone()[0]
-    print(f"VERIFICATION: Database now contains {count} total records.")
-    
-    db_connection.close()
+    # Handle potentially old postgres:// prefix
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+    try:
+        conn = psycopg2.connect(db_url)
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute('''
+                    CREATE TABLE IF NOT EXISTS history (
+                        id SERIAL PRIMARY KEY,
+                        slug TEXT,
+                        title TEXT,
+                        mean_date TEXT,
+                        std_dev_days REAL,
+                        calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                
+                cur.execute('''
+                    INSERT INTO history (slug, title, mean_date, std_dev_days, calculated_at)
+                    VALUES (%s, %s, %s, %s, %s)
+                ''', (
+                    event_slug, 
+                    event_title, 
+                    mean_date.strftime('%Y-%m-%d %H:%M:%S') if mean_date else None, 
+                    std_dev_days,
+                    datetime.now()
+                ))
+        conn.close()
+        print(f"DATABASE UPDATE COMPLETE for {event_slug}")
+    except Exception as e:
+        print(f"Error saving to database: {e}")
 
 def fetch_polymarket_event(event_slug):
     """Fetches the full event JSON data from the Polymarket API."""
@@ -219,10 +208,8 @@ def analyze_event_predictions(event_slug):
     print(f"=> Expected Date: {projected_mean_date.strftime('%B %d, %Y')}")
     print(f"=> Std Dev:      +/- {std_dev_days:.1f} days")
 
-    db_path = '/data/predictions.db' if os.path.isdir('/data') else 'predictions.db'
-    print(f"DEBUG: Saving result to database at: {db_path}")
     save_prediction_to_database(event_slug, event_data.get('title'), projected_mean_date, std_dev_days)
-    print(f"DATABASE UPDATE COMPLETE for {event_slug}")
+
 
 if __name__ == "__main__":
     with open("urls.txt", "r") as f:

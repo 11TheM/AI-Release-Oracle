@@ -1,28 +1,22 @@
 from flask import Flask, render_template, jsonify
-import sqlite3
 import os
 import datetime
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
 
 def get_db_connection():
-    # Priority: /data/predictions.db for shared Runway volume
-    # Fallback: local predictions.db for local development
-    db_path = 'predictions.db'
+    # Use DATABASE_URL from environment
+    db_url = os.environ.get('DATABASE_URL')
+    if not db_url:
+        return None
     
-    # Check if /data exists and is writable
-    if os.path.isdir('/data'):
-        db_path = '/data/predictions.db'
-        # Ensure the file exists so we don't hit read-only errors later
-        if not os.path.exists(db_path):
-            try:
-                open(db_path, 'a').close()
-            except Exception as e:
-                print(f"Warning: Could not touch {db_path}: {e}")
-                db_path = 'predictions.db' # Revert to local if /data is read-only
-                
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
+    # Handle potentially old postgres:// prefix
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql://", 1)
+        
+    conn = psycopg2.connect(db_url, cursor_factory=RealDictCursor)
     return conn
 
 def extract_event_slug_from_url(url_string):
@@ -44,96 +38,73 @@ def index():
 @app.route('/api/data')
 def get_data():
     active_slugs = get_active_slugs()
+    conn = get_db_connection()
     
-    db_path = 'predictions.db'
-    if os.path.isdir('/data'):
-        db_path = '/data/predictions.db'
+    if not conn:
+        return jsonify({
+            'data': {},
+            'error': 'DATABASE_URL not set in environment',
+            'debug': {'db_path_used': 'POSTGRES'}
+        })
     
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    
-    # Ensure table exists
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            slug TEXT,
-            title TEXT,
-            mean_date TEXT,
-            std_dev_days REAL,
-            calculated_at DATETIME
-        )
-    ''')
-    
-    try:
-        rows = conn.execute('SELECT slug, title, mean_date, std_dev_days, calculated_at FROM history ORDER BY calculated_at DESC').fetchall()
-    except sqlite3.OperationalError:
-        rows = []
+    with conn:
+        with conn.cursor() as cur:
+            # Ensure table exists
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS history (
+                    id SERIAL PRIMARY KEY,
+                    slug TEXT,
+                    title TEXT,
+                    mean_date TEXT,
+                    std_dev_days REAL,
+                    calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            try:
+                cur.execute('SELECT slug, title, mean_date, std_dev_days, calculated_at FROM history ORDER BY calculated_at DESC')
+                rows = cur.fetchall()
+            except Exception:
+                rows = []
     conn.close()
     
     last_updated = None
     data_by_slug = {}
     
-    # If urls.txt is empty or missing, we'll show all data. 
-    # Otherwise, we'll use it as a priority list.
     for row in rows:
         slug = row['slug']
         
         # Capture the most recent timestamp
         if last_updated is None:
-            last_updated = row['calculated_at']
+            # Convert timestamp to string if it is a datetime object
+            if isinstance(row['calculated_at'], datetime.datetime):
+                last_updated = row['calculated_at'].isoformat()
+            else:
+                last_updated = str(row['calculated_at'])
             
         if slug not in data_by_slug:
             data_by_slug[slug] = {'title': row['title'], 'history': []}
         
         data_by_slug[slug]['history'].append({
-            'x': row['calculated_at'],
+            'x': row['calculated_at'].isoformat() if isinstance(row['calculated_at'], datetime.datetime) else str(row['calculated_at']),
             'y_mean': row['mean_date'],
             'y_std_dev': row['std_dev_days']
         })
-    
-    # Final check: If after filtering by active_slugs we have nothing, 
-    # but the DB HAD rows, we should show them anyway to avoid a blank screen.
-    if rows and not data_by_slug:
-        # Re-run without filtering if the filter killed all results
-        for row in rows:
-            slug = row['slug']
-            if slug not in data_by_slug:
-                data_by_slug[slug] = {'title': row['title'], 'history': []}
-            data_by_slug[slug]['history'].append({
-                'x': row['calculated_at'],
-                'y_mean': row['mean_date'],
-                'y_std_dev': row['std_dev_days']
-            })
     
     # Reverse history for each slug so charts go left-to-right (chronological)
     for slug in data_by_slug:
         data_by_slug[slug]['history'].reverse()
     
-    # Get file stats for debugging
-    local_files = os.listdir('.') if os.path.exists('.') else []
-    data_files = os.listdir('/data') if os.path.isdir('/data') else ["/data is not a directory"]
-    
-    file_info = {}
-    if os.path.exists(db_path):
-        stats = os.stat(db_path)
-        file_info = {
-            'size_bytes': stats.st_size,
-            'last_modified': datetime.datetime.fromtimestamp(stats.st_mtime).isoformat(),
-            'path_abs': os.path.abspath(db_path)
-        }
-    
     return jsonify({
         'data': data_by_slug,
         'last_updated': last_updated,
         'debug': {
-            'db_path_used': db_path,
-            'db_file_exists': os.path.exists(db_path),
-            'db_stats': file_info,
+            'db_type': 'POSTGRESQL',
             'db_row_count': len(rows),
-            'active_slugs_count': len(active_slugs),
-            'data_directory_contents': data_files
+            'active_slugs_count': len(active_slugs)
         }
     })
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
