@@ -36,10 +36,13 @@ def get_data():
         rows = []
     conn.close()
     
+    last_updated = None
     data_by_slug = {}
     for row in rows:
         slug = row['slug']
         if slug not in active_slugs: continue
+        
+        last_updated = row['calculated_at']
             
         if slug not in data_by_slug:
             data_by_slug[slug] = {'title': row['title'], 'history': []}
@@ -50,7 +53,10 @@ def get_data():
             'y_std_dev': row['std_dev_days']
         })
     
-    return jsonify(data_by_slug)
+    return jsonify({
+        'data': data_by_slug,
+        'last_updated': last_updated
+    })
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

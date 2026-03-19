@@ -165,7 +165,6 @@
                     <button id="btn-timeline" class="toggle-btn" onclick="setViewMode('timeline')">Timeline</button>
                 </div>
                 <span id="last-updated">Updating...</span>
-                <button class="refresh-btn" onclick="loadData()">Refresh</button>
             </div>
         </div>
     </header>
@@ -207,253 +206,32 @@
                 const updatedEl = document.getElementById('last-updated');
                 updatedEl.innerText = 'Updating...';
                 const response = await fetch('/api/data');
-                cachedData = await response.json();
+                const result = await response.json();
+                cachedData = result.data;
                 renderView();
-                updatedEl.innerText = 'Last updated: ' + moment().format('h:mm:ss A');
+                
+                if (result.last_updated) {
+                    updatedEl.innerText = 'Data from: ' + moment(result.last_updated).format('MMM D, h:mm A');
+                } else {
+                    updatedEl.innerText = 'No data available';
+                }
             } catch (error) {
                 console.error(error);
                 document.getElementById('last-updated').innerText = 'Error';
             }
         }
 
-        function showSummary() {
-            document.getElementById('summary-view').style.display = 'block';
-            document.getElementById('detail-view').style.display = 'none';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        function showDetail(slug) {
-            document.getElementById('summary-view').style.display = 'none';
-            document.getElementById('detail-view').style.display = 'block';
-            renderDetail(slug);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        function renderView() {
-            const summaryRoot = document.getElementById('summary-root');
-            const timelineRoot = document.getElementById('timeline-root');
-            summaryRoot.innerHTML = '';
-            timelineRoot.innerHTML = '';
-            
-            if (!cachedData || Object.keys(cachedData).length === 0) return;
-
-            let timelineEvents = [];
-            for (const [slug, info] of Object.entries(cachedData)) {
-                if (info.history.length === 0) continue;
-                const latest = info.history[info.history.length - 1];
-                const mean = moment(latest.y_mean);
-                const stdDev = latest.y_std_dev;
-                
-                const card = document.createElement('div');
-                card.className = 'summary-card';
-                card.onclick = () => showDetail(slug);
-                
-                const daysRemaining = Math.ceil(mean.diff(moment(), 'days', true));
-                
-                card.innerHTML = `
-                    <div class="card-header-row">
-                        <h4>${info.title.split(' released by')[0]}</h4>
-                        <span class="metric-countdown">${daysRemaining} days remaining</span>
-                    </div>
-                    
-                    <div class="release-hero">
-                        <div class="summary-meta">Expected Release</div>
-                        <div class="summary-date">${mean.format('MMM D, YYYY')}</div>
-                    </div>
-
-                    <div class="window-box">
-                        <div class="window-label">Confidence Window (±1σ)</div>
-                        <div class="window-dates">${mean.clone().subtract(stdDev, 'days').format('MMM D, YYYY')} – ${mean.clone().add(stdDev, 'days').format('MMM D, YYYY')}</div>
-                    </div>
-                `;
-                summaryRoot.appendChild(card);
-                timelineEvents.push({ title: info.title.split(' released by')[0], date: mean, stdDev: stdDev, slug: slug });
-            }
-
-            timelineEvents.sort((a, b) => a.date.valueOf() - b.date.valueOf());
-            let previousDate = null;
-            timelineEvents.forEach((ev, index) => {
-                const isLeft = index % 2 === 0;
-                const item = document.createElement('div');
-                item.className = `timeline-item ${isLeft ? 'left' : 'right'}`;
-                let marginTop = 20;
-                
-                const daysRemaining = Math.ceil(ev.date.diff(moment(), 'days', true));
-                
-                if (previousDate) {
-                    const diffDays = ev.date.diff(previousDate, 'days');
-                    marginTop += Math.min(Math.max(diffDays * 1.5, 0), 250);
-                    if (marginTop > 60) {
-                        const diffText = diffDays >= 30 ? `+${Math.round(diffDays/30)} mo` : `+${diffDays} d`;
-                        item.innerHTML += `<div class="timeline-spacer" style="top: -${marginTop/2 + 10}px;">${diffText}</div>`;
-                    }
-                }
-                previousDate = ev.date;
-                item.style.marginTop = index === 0 ? '0px' : `${marginTop}px`;
-                item.innerHTML += `
-                    <div class="timeline-content" onclick="showDetail('${ev.slug}')">
-                        <div class="card-header-row" style="margin-bottom: 16px;">
-                            <div class="timeline-date" style="margin-bottom: 0;">${ev.date.format('MMM D, YYYY')}</div>
-                            <span class="metric-countdown">${daysRemaining} days remaining</span>
-                        </div>
-                        <h4 class="timeline-title">${ev.title}</h4>
-                        <div class="window-box" style="background: rgba(0,0,0,0.15);">
-                            <div class="window-label">Window (±1σ)</div>
-                            <div class="window-dates" style="font-size: 0.8rem;">${ev.date.clone().subtract(ev.stdDev, 'days').format('MMM D, YYYY')} – ${ev.date.clone().add(ev.stdDev, 'days').format('MMM D, YYYY')}</div>
-                        </div>
-                    </div>
-                `;
-                timelineRoot.appendChild(item);
-            });
-        }
-
-        function renderDetail(slug) {
-            const root = document.getElementById('detail-root');
-            const info = cachedData[slug];
-            const latest = info.history[info.history.length - 1];
-            const mean = moment(latest.y_mean);
-            
-            const daysRemaining = Math.ceil(mean.diff(moment(), 'days', true));
-            
-            root.innerHTML = `
-                <div class="chart-card">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; border-bottom: 1px solid var(--border-color); padding-bottom: 24px;">
-                        <h3 style="font-size: 2rem; margin: 0;">${info.title.split(' released by')[0]}</h3>
-                        <div style="text-align: right;">
-                             <div class="summary-meta" style="margin-bottom: 4px;">Expected Release</div>
-                             <div style="font-size: 1.75rem; font-weight: 800; color: #f87171; line-height: 1;">${mean.format('MMMM D, YYYY')}</div>
-                             <div style="margin-top: 8px;">
-                                <span class="metric-countdown" style="font-size: 0.9rem; padding: 4px 12px;">${daysRemaining} days remaining</span>
-                             </div>
-                        </div>
-                    </div>
-                    
-                    <div style="display: flex; flex-direction: column; gap: 48px;">
-                        <div>
-                            <p style="color:var(--text-muted); font-size: 0.875rem; margin-bottom: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Release Date Forecast (± ${latest.y_std_dev.toFixed(1)} days)</p>
-                            <div class="chart-container" style="margin-top: 0; height: 400px; border: none; padding: 0;"><canvas id="detail-chart"></canvas></div>
-                        </div>
-                        <div>
-                            <p style="color:var(--text-muted); font-size: 0.875rem; margin-bottom: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Days Remaining Trend</p>
-                            <div class="chart-container" style="margin-top: 0; height: 300px; border: none; padding: 0;"><canvas id="countdown-chart"></canvas></div>
-                        </div>
-                    </div>
-                </div>`;
-
-            const ctx = document.getElementById('detail-chart').getContext('2d');
-            const ctxCountdown = document.getElementById('countdown-chart').getContext('2d');
-            
-            const meanData = info.history.map(pt => ({ x: pt.x, y: pt.y_mean }));
-            const upperData = info.history.map(pt => ({ x: pt.x, y: moment(pt.y_mean).add(pt.y_std_dev, 'days').valueOf() }));
-            const lowerData = info.history.map(pt => ({ x: pt.x, y: moment(pt.y_mean).subtract(pt.y_std_dev, 'days').valueOf() }));
-            
-            const countdownData = info.history.map(pt => ({ 
-                x: pt.x, 
-                y: Math.round(Math.max(0, moment(pt.y_mean).diff(moment(pt.x), 'days', true))) 
-            }));
-
-            if (window.detailChart) window.detailChart.destroy();
-            window.detailChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    datasets: [
-                        { 
-                            label: 'Expected Date', 
-                            data: meanData.map(pt => ({ x: pt.x, y: moment(pt.y).startOf('day').valueOf() })), 
-                            borderColor: '#ef4444', 
-                            borderWidth: 3, 
-                            fill: false, 
-                            tension: 0.3 
-                        },
-                        { 
-                            label: 'Confidence Window', 
-                            data: upperData.map(pt => ({ x: pt.x, y: moment(pt.y).startOf('day').valueOf() })), 
-                            borderColor: 'transparent', 
-                            backgroundColor: 'rgba(59, 130, 246, 0.1)', 
-                            fill: '+1', 
-                            tension: 0.3, 
-                            pointRadius: 0 
-                        },
-                        { 
-                            label: 'Lower Bound', 
-                            data: lowerData.map(pt => ({ x: pt.x, y: moment(pt.y).startOf('day').valueOf() })), 
-                            borderColor: 'transparent', 
-                            backgroundColor: 'rgba(59, 130, 246, 0.1)', 
-                            fill: false, 
-                            tension: 0.3, 
-                            pointRadius: 0 
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { 
-                        title: { display: false }, 
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: (ctx) => {
-                                    return ctx.dataset.label + ': ' + moment(ctx.parsed.y).format('MMM D, YYYY');
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: { type: 'time', time: { unit: 'day' }, grid: { color: 'rgba(55, 65, 81, 0.2)' } },
-                        y: { 
-                            type: 'time', 
-                            time: { unit: 'day', displayFormats: { day: 'MMM D, YYYY' } }, 
-                            grid: { color: 'rgba(55, 65, 81, 0.2)' } 
-                        }
-                    }
-                }
-            });
-
-            if (window.countdownChart) window.countdownChart.destroy();
-            window.countdownChart = new Chart(ctxCountdown, {
-                type: 'line',
-                data: {
-                    datasets: [{
-                        label: 'Days Remaining',
-                        data: countdownData,
-                        borderColor: '#3b82f6',
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        borderWidth: 3,
-                        fill: true,
-                        tension: 0.3
-                    }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { 
-                        title: { display: false }, 
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: (ctx) => {
-                                    return ctx.dataset.label + ': ' + Math.round(ctx.parsed.y) + ' days';
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: { type: 'time', time: { unit: 'day' }, grid: { color: 'rgba(55, 65, 81, 0.2)' } },
-                        y: { 
-                            beginAtZero: true, 
-                            title: { display: true, text: 'Days', color: '#9ca3af' }, 
-                            grid: { color: 'rgba(55, 65, 81, 0.2)' },
-                            ticks: {
-                                stepSize: 1,
-                                callback: (value) => Math.round(value)
-                            }
-                        }
-                    }
-                }
-            });
+        function getTimeUntilNextMidnight() {
+            const now = moment.utc();
+            const nextMidnight = moment.utc().add(1, 'day').startOf('day');
+            return nextMidnight.diff(now);
         }
 
         loadData();
-        setInterval(loadData, 60000);
+        setTimeout(() => {
+            loadData();
+            setInterval(loadData, 86400000); // Refresh daily
+        }, getTimeUntilNextMidnight() + 120000);
     </script>
 </body>
 </html>
